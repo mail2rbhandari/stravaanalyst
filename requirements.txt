@@ -6,3 +6,4 @@ folium
 streamlit-folium
 stravalib
 python-dateutil
+scikit-learn
