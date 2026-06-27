@@ -1,7 +1,9 @@
-streamlit
+streamlit>=1.38
 pandas
 plotly
 plotly-express
 folium
 streamlit-folium
 stravalib
+python-dateutil
+pytz
