@@ -15,32 +15,39 @@ st.set_page_config(page_title="EnduraAnalyst", layout="wide")
 st.title("🏃‍♂️ EnduraAnalyst Pro")
 st.markdown("### Serious Endurance Athlete Analytics")
 
+# Sidebar Login
 st.sidebar.header("🔑 Strava Login")
 client_id = st.sidebar.text_input("Client ID", type="password", key="cid")
 client_secret = st.sidebar.text_input("Client Secret", type="password", key="csec")
 
+client = Client()
+
 if client_id and client_secret:
-    if st.sidebar.button("Login with Strava"):
-        redirect_uri = "https://stravaanalyst1.streamlit.app"
-        auth_url = f"https://www.strava.com/oauth/authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope=read,activity:read"
-        st.sidebar.markdown(f"[🔗 Authorize on Strava]({auth_url})")
-        st.sidebar.info("After approval, paste the code from URL")
+    if st.sidebar.button("🔐 Authorize with Strava"):
+        redirect_uri = "https://stravaanalyst1.streamlit.app"  # Change to your exact URL
+        auth_url = client.authorization_url(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            scope=["read", "activity:read"]
+        )
+        st.sidebar.markdown(f"[Continue to Strava]({auth_url})")
+        st.sidebar.info("After approval, you will be redirected back automatically.")
 
-    code = st.sidebar.text_input("Authorization Code", key="code_input")
-    
-    if code and st.sidebar.button("Exchange & Connect"):
-        try:
-            client = Client()
-            token = client.exchange_code_for_token(client_id=client_id, client_secret=client_secret, code=code)
-            st.session_state.token = token
-            st.success("✅ Connected!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
+# Auto-handle redirect code from URL
+if "code" in st.query_params:
+    try:
+        code = st.query_params["code"]
+        token = client.exchange_code_for_token(client_id=client_id, client_secret=client_secret, code=code)
+        st.session_state.token = token
+        st.success("✅ Successfully Connected!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Auth Error: {e}")
 
+# Main Dashboard
 if "token" in st.session_state:
     client = Client(access_token=st.session_state.token['access_token'])
-    st.success("✅ Live Connection Active")
+    st.success("✅ Live Strava Connection Active")
     
     try:
         activities = list(client.get_activities(limit=100))
@@ -57,7 +64,7 @@ if "token" in st.session_state:
         if not df.empty:
             df['pace_min_km'] = df['moving_time_min'] / df['distance_km'].replace(0, float('nan'))
             
-            tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "📈 Trends & Predictions", "🗺️ Routes", "🔥 Heatmap"])
+            tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "📈 Trends", "🗺️ Routes", "🔥 Heatmap"])
             
             with tab1:
                 col1, col2, col3 = st.columns(3)
@@ -69,42 +76,42 @@ if "token" in st.session_state:
                 st.plotly_chart(fig, width='stretch')
             
             with tab2:
-                st.subheader("Monthly Trends")
+                st.subheader("Performance Trends & Predictions")
                 monthly = df.groupby(pd.to_datetime(df['start_date']).dt.to_period('M'))['distance_km'].sum().reset_index()
                 monthly['start_date'] = monthly['start_date'].dt.to_timestamp()
                 st.plotly_chart(px.line(monthly, x='start_date', y='distance_km'), width='stretch')
                 
-                st.subheader("Future Distance Prediction")
                 if len(df) > 5:
                     X = np.arange(len(df)).reshape(-1, 1)
                     y = df['distance_km'].values
                     model = LinearRegression().fit(X, y)
                     future = np.arange(len(df), len(df)+12).reshape(-1, 1)
                     pred = model.predict(future)
-                    st.line_chart(pd.DataFrame({'Predicted km': pred}))
+                    st.line_chart(pd.DataFrame({'Predicted Distance (km)': pred}))
             
             with tab3:
-                st.subheader("Your Routes (Red Path)")
+                st.subheader("Your Running Routes")
                 if not df.empty:
-                    activity_id = st.selectbox("Select Activity", df.index)
+                    selected = st.selectbox("Select Activity", df['name'])
+                    idx = df[df['name'] == selected].index[0]
                     try:
-                        stream = client.get_activity_streams(df.iloc[activity_id]['id'], types=['latlng'])
+                        stream = client.get_activity_streams(df.iloc[idx]['id'], types=['latlng'])
                         if 'latlng' in stream:
                             points = stream['latlng'].data
                             m = folium.Map(location=points[0], zoom_start=13)
                             folium.PolyLine(points, color="red", weight=4, opacity=0.8).add_to(m)
                             st_folium(m, width='stretch')
                     except:
-                        st.info("Route data loading...")
+                        st.info("Loading route...")
             
             with tab4:
                 st.subheader("Training Heatmap")
                 m = folium.Map(location=[30.3, 78.0], zoom_start=8)
-                HeatMap([[30.3, 78.0]], radius=30).add_to(m)  # Expand later
+                HeatMap([[30.3, 78.0]], radius=30).add_to(m)
                 st_folium(m, width='stretch')
     except Exception as e:
         st.error(f"Data Error: {e}")
 else:
-    st.info("Login with Strava in the sidebar to begin")
+    st.info("Click 'Authorize with Strava' in sidebar to begin")
 
 st.caption("EnduraRank MVP - Built for Robin")
